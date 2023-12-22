@@ -34,23 +34,23 @@ join film_category fc on fc.film_id = i.film_id
 join category c on c.category_id = fc.category_id 
 group by c."name" 
 order by total_sales desc
-limit 1;
+fetch first row with ties;
 
 -- Второй вариант
 select * 
 from public.sales_by_film_category
 order by total_sales desc
-limit 1;
+fetch first row with ties;
 
 
 -- 4. Вывести названия фильмов, которых нет в inventory. Написать запрос без использования оператора IN.
 -- Первый вариант
-with my_cte as(
+with films_not_in_inventory as(
 	select film_id from film f 
 	except
 	select film_id from inventory i)
 
-select f.film_id, f.title from my_cte c
+select f.film_id, f.title from films_not_in_inventory c
 join film f on f.film_id = c.film_id
 order by f.film_id; 
 
@@ -61,31 +61,34 @@ left join inventory i on i.film_id = f.film_id
 where i.inventory_id is null
 order by f.film_id; 
 
+-- Третий вариант с использованием anti join
+select f.film_id, f.title
+from film f
+where not exists (select i.film_id from inventory i where i.film_id = f.film_id)
+order by f.film_id; 
+
+
 -- 5. Вывести топ 3 актеров, которые больше всего появлялись в фильмах в категории “Children”. Если у нескольких актеров одинаковое кол-во фильмов, вывести всех.
--- CTE для опреденения тор 3 количества поаторений актуров в категории “Children”
-with cte as(
-	select distinct count(c."name")
+-- CTE для подсчёта количества повторений актёров в категории “Children”
+with count_actors_children_films as(
+	select a.actor_id, a.first_name, a.last_name, count(c."name") as number_of_films_in_category_children
 	from actor a 
 	join film_actor fa on fa.actor_id = a.actor_id 
 	join public.film f on f.film_id = fa.film_id 
 	join public.film_category fc on fc.film_id = f.film_id 
-	join category c on c.category_id = fc.category_id 
-	where c."name" = 'Children'
-	group by c."name", a.actor_id, a.first_name, a.last_name 
-	order by count(c."name") desc 
+	join category c on c.category_id = fc.category_id and c."name" = 'Children'
+	group by c."name", a.actor_id
+	order by count(c."name") desc), 
+-- CTE для выбора топ 3 количества повторений актёров в категории “Children”
+	top_3_children_filming_amounts as(
+	select distinct number_of_films_in_category_children as max_number 
+	from count_actors_children_films 
+	order by max_number desc 
 	limit 3)
-
--- Вывод списка актеров
-select a.actor_id, a.first_name, a.last_name, count(c."name") as "number_of_films_in_category_children"
-from actor a 
-join film_actor fa on fa.actor_id = a.actor_id 
-join public.film f on f.film_id = fa.film_id 
-join public.film_category fc on fc.film_id = f.film_id 
-join category c on c.category_id = fc.category_id 
-where c."name" = 'Children' 
-group by c."name", a.actor_id, a.first_name, a.last_name
-having count(c."name") in (select * from  cte)
-order by number_of_films_in_category_children desc; 
+	
+select *
+from count_actors_children_films c
+where c.number_of_films_in_category_children in(select * from top_3_children_filming_amounts)
 
 
 -- 6. Вывести города с количеством активных и неактивных клиентов (активный — customer.active = 1). 
@@ -105,7 +108,7 @@ order by inactive_customers desc;
 
 -- 7. Вывести категорию фильмов, у которой самое большое кол-во часов суммарной аренды в городах (customer.address_id в этом city), 
 -- и которые начинаются на букву “a”. То же самое сделать для городов в которых есть символ “-”. Написать все в одном запросе.
-with cte as (
+with count_rental_hours as (
 	select c2.city, c3.name, sum(extract(hour from  return_date - rental_date)) as rental_hours
 	from public.rental r 
 	join customer c on c.customer_id = r.customer_id
@@ -119,7 +122,7 @@ with cte as (
 	group by c2.city, c3.name)
 	
 select * from (select city, name, max(rental_hours) as rental_hours
-	from cte 
+	from count_rental_hours 
 	where city ilike 'A%'
 	group by city, name
 	having max(rental_hours) is not null
@@ -127,7 +130,7 @@ select * from (select city, name, max(rental_hours) as rental_hours
 	limit 1)
 union 
 select * from (select city, name, max(rental_hours) as rental_hours
-	from cte 
+	from count_rental_hours 
 	where city ilike '%-%'
 	group by city, name
 	having max(rental_hours) is not null
