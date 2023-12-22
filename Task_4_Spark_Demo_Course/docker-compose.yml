@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  spark:
+    image: bitnami/spark:latest
+    ports:
+      - "4040:4040" # Web UI
+      - "6066:6066" # Spark Master
+      - "7077:7077" # Spark Master
+      - "8080:8080" # Spark Worker
+    volumes:
+    - .:/opt/bitnami/spark/work
+    - ./for_history:/tmp/spark-events
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+  
+  history-server:
+    image: bitnami/spark:latest
+    command: spark-class org.apache.spark.deploy.history.HistoryServer
+    volumes:
+      - ./for_history:/tmp/spark-events
+    ports:
+      - "18080:18080"
+
+  jupyter:
+    image: jupyter/pyspark-notebook:latest
+    ports:
+      - "8889:8889"
+    volumes:
+      - .:/home/jovyan/work
+    depends_on:
+      - spark
+    environment:
+      - SPARK_OPTS=--total-executor-cores=2

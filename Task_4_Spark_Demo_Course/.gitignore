@@ -1,0 +1,11 @@
+# Data for load into Spark
+/data_parquet
+ds_salaries.csv
+top_100_richest.csv
+wiki_number_of_billionaires.csv
+
+# Spark data
+/app-20231221092759-0004
+/for_history
+
+ 
